@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from BeautifulSoup import BeautifulSoup
+from pprint import pprint
 import json
 import urllib2
 import sqlite3
@@ -16,10 +17,8 @@ class GamespotInfo:
         self.title = None
         self.system = None
         self.boxart = None
-        self.release_date_text = None
+        self.release_date = None
         self.summary = None
-        self.score = None
-        self.score_desc = None
         self.publisher = None
         self.developer = None
         self.genre = None
@@ -31,29 +30,7 @@ class GamespotInfo:
         self.critic_count = None
         self.user_score = None
         self.user_count = None
-            
-    def __repr__(self):
-        return repr([ self.id, \
-                    self.link, \
-                    self.title, \
-                    self.system, \
-                    self.boxart, \
-                    self.release_date_text, \
-                    self.summary, \
-                    self.score, \
-                    self.score_desc, \
-                    self.publisher, \
-                    self.developer, \
-                    self.genre, \
-                    self.esrb, \
-                    self.esrb_reason, \
-                    self.score, \
-                    self.score_desc, \
-                    self.critic_score, \
-                    self.critic_count, \
-                    self.user_score, \
-                    self.user_count ])
-        
+                    
 class SearchResult:
     def __init__(self):
         self.id = None
@@ -61,25 +38,12 @@ class SearchResult:
         self.system = None
         self.link = None
         self.score = None
-        self.release_date_text = None
+        self.release_date = None
         self.summary = None
         self.boxart = None
         self.tags = None
         self.index = None
         self.page = None
-
-    def __repr__(self):
-        return repr([ self.id, \
-                    self.title, \
-                    self.system, \
-                    self.link, \
-                    self.score, \
-                    self.release_date_text, \
-                    self.summary, \
-                    self.boxart, \
-                    self.tags, \
-                    self.index, \
-                    self.page ])
         
 class Gamespot:
 
@@ -123,7 +87,7 @@ class Gamespot:
                         continue
                     match = re.search("Release Date: (?P<date>.+)", dt)
                     if match:
-                        res.release_date_text = match.group("date").strip()
+                        res.release_date = match.group("date").strip()
                         continue
             
             deck = game_result.find("div", "deck")
@@ -203,14 +167,14 @@ class Gamespot:
         info.publisher = get_li_span_data(stats, "publisher")
         info.developer = get_li_span_data(stats, "developer")
         info.genre = get_li_span_data(stats, "genre")
-        info.release_date_text = get_li_span_data(stats, "date").replace("&raquo;", "").strip()
+        info.release_date = get_li_span_data(stats, "date").replace("&raquo;", "").strip()
         info.esrb = get_li_span_data(stats, "maturity")
             
         return info
         
     @staticmethod
     def get_id(link):
-        l = link.replace("http://www.gamespot.com/", "")
+        l = link[link.find(".com/") + 5:]
         l = l[:len(l)-1]
         l = l.replace("/", "_")
         return l
@@ -267,7 +231,7 @@ def process_game_info(info, type, value):
     elif type == "Genre":
         info.genre = value
     elif type == "Release Date":
-        info.release_date_text = value.replace("  ", " 0").replace("(more)", "")
+        info.release_date = value.replace("  ", " 0").replace("(more)", "")
     elif type == "ESRB":
         info.esrb = value
     elif type == u"ESRB\xa0Descriptors":
@@ -290,7 +254,7 @@ def process_game_infos(soup):
         soup2 = BeautifulSoup(gi)
         divs = soup2.findAll("div")
         for div in divs:
-            type = div["class"]
+            type = div["class"].strip()
             value = div.text.strip()
             process_game_info(info, type, value)
         
@@ -319,8 +283,10 @@ def main():
     if len(sys.argv) == 2:
         results = Gamespot.search(sys.argv[1])
         for result in results:
-            print result, "\n"
-            print Gamespot.get_info(result.id), "\n"
+            pprint(vars(result))
+            print ""
+            pprint(vars(Gamespot.get_info(result.id)))
+            print ""
 
 if __name__ == "__main__":
     main()
