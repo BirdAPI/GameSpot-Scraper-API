@@ -139,7 +139,6 @@ def get_html_from_ajax_search(query):
         request.add_header("User-Agent", "Mozilla/5.001 (windows; U; NT4.0; en-US; rv:1.0) Gecko/25250101")
         request.add_header("Cookie", "hello_from_gs=1")
         request.add_header("Referer", get_search_url(query))
-        request.add_header("Cookie", "hello_from_gs=1")
         request.add_header("X-Request", "JSON")
         request.add_header("X-Requested-With", "XMLHttpRequest")
         request.add_header("Accept", "application/json")
