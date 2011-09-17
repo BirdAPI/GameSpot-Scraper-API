@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from BeautifulSoup import BeautifulSoup
+from pprint import pprint
 import json
 import urllib2
 import sqlite3
@@ -9,15 +10,27 @@ import sys
 import re
 import os
 
-class GameSpotInfo:
+class GamespotInfo:
     def __init__(self):
         self.id = None
+        self.link = None
         self.title = None
         self.system = None
         self.boxart = None
-        self.release_date_text = None
+        self.release_date = None
         self.summary = None
-    
+        self.publisher = None
+        self.developer = None
+        self.genre = None
+        self.esrb = None
+        self.esrb_reason = None
+        self.score = None
+        self.score_desc = None
+        self.critic_score = None
+        self.critic_count = None
+        self.user_score = None
+        self.user_count = None
+                    
 class SearchResult:
     def __init__(self):
         self.id = None
@@ -25,27 +38,14 @@ class SearchResult:
         self.system = None
         self.link = None
         self.score = None
-        self.release_date_text = None
+        self.release_date = None
         self.summary = None
         self.boxart = None
         self.tags = None
         self.index = None
         self.page = None
-
-    def __repr__(self):
-        return repr([ self.id, \
-                    self.title, \
-                    self.system, \
-                    self.link, \
-                    self.score, \
-                    self.release_date_text, \
-                    self.summary, \
-                    self.boxart, \
-                    self.tags, \
-                    self.index, \
-                    self.page ])
         
-class GameSpot:
+class Gamespot:
 
     @staticmethod
     def search(query):
@@ -66,7 +66,7 @@ class GameSpot:
                 a = result_title.find("a")
                 if a:
                     res.link = a["href"][:a["href"].find("index.html")]
-                    res.id = GameSpot.get_id(res.link)
+                    res.id = Gamespot.get_id(res.link)
                     res.title = a.text[:a.text.rfind("(")].strip()
                     res.system = a.text[a.text.rfind("(") + 1 : a.text.rfind(")")]
             
@@ -81,14 +81,13 @@ class GameSpot:
                 dts = details.text.strip().split("|")
                 for dt in dts:
                     dt = dt.replace("&nbsp;", "")
-                    print "dt: \"" + dt + "\""
                     match = re.search("Review Score:(?P<score>.+)", dt)
                     if match:
                         res.score = match.group("score").strip()
                         continue
                     match = re.search("Release Date: (?P<date>.+)", dt)
                     if match:
-                        res.release_date_text = match.group("date").strip()
+                        res.release_date = match.group("date").strip()
                         continue
             
             deck = game_result.find("div", "deck")
@@ -108,25 +107,90 @@ class GameSpot:
         return allresults
             
     @staticmethod
-    def get_info(link):
-        return None
+    def get_info(id):
+        #url = get_info_url(id)
+        url = Gamespot.get_link(id)
+        html = get_html(url)
+        if not html:
+            return None
+        soup = BeautifulSoup(html)
+        
+        info = GamespotInfo()
+        info.id = id
+        info.link = url
+        
+        product_title = soup.find("h2", "product_title")
+        if product_title:
+            a = product_title.find("a")
+            if a:
+                info.title = a.text.strip()
+        
+        boxshot = soup.find("div", "boxshot")
+        if boxshot:
+            img = boxshot.find("img")
+            if img:
+                info.boxart = img["src"]
+        
+        #NOTE: For use with tech_info.html
+        # platform_rank = soup.find("dt", "platform_rank")
+        # if platform_rank:
+            # info.system = platform_rank.text.replace("Rank:", "").strip()
+            
+        plat_name = soup.find("div", "plat_name")
+        if plat_name:
+            info.system = plat_name.text.replace("(", "").replace(")", "").strip()
+        
+        deck = soup.find("meta", attrs={"name":"description"})
+        if deck:
+            info.summary = deck["content"].strip()
+        
+        review_scores = soup.find("ul", "review_scores")
+        if review_scores:
+            (info.score, info.score_desc) = get_li_data_more(review_scores, "editor_score", "scoreword")
+            (info.critic_score, info.critic_count) = get_li_data_more(review_scores, "critic_score")
+            if info.critic_count:
+                info.critic_count = info.critic_count.replace("reviews", "").strip()
+            (info.user_score, info.user_count) = get_li_data_more(review_scores, "community_score")
+            if info.user_count:
+                info.user_count = info.user_count.replace(",", "").replace("votes", "").replace("vote", "").strip()
+        
+        esrb_module = soup.find("div", id="esrb_module")
+        if esrb_module:
+            p = esrb_module.find("p")
+            if p:
+                info.esrb_reason = p.text.strip()
+        
+        #NOTE: For use with tech_info.html
+        # process_game_infos(soup)
+        
+        stats = soup.find("ul", "stats")
+        info.publisher = get_li_span_data(stats, "publisher")
+        info.developer = get_li_span_data(stats, "developer")
+        info.genre = get_li_span_data(stats, "genre")
+        info.release_date = get_li_span_data(stats, "date").replace("&raquo;", "").strip()
+        info.esrb = get_li_span_data(stats, "maturity")
+            
+        return info
         
     @staticmethod
     def get_id(link):
-        l = link.replace("http://www.gamespot.com/", "")
+        l = link[link.find(".com/") + 5:]
         l = l[:len(l)-1]
         l = l.replace("/", "_")
         return l
     
     @staticmethod
     def get_link(id):
-        return ""
+        return "http://www.gamespot.com/%s/" % id.replace("_", "/")
 
 def get_search_url(query):
     return "http://www.gamespot.com/search.html?qs=%s" % query.replace(":", "").replace("-", "").replace("_", "").replace(" ", "+")
 
-def get_ajax_search_url(query):
-    return "http://www.gamespot.com/pages/search/search_ajax.php?q=%s&type=game&offset=0&tags_only=false&sort=rank" % query.replace(":", "").replace("-", "").replace("_", "").replace(" ", "%20")
+def get_ajax_search_url(query, page=0):
+    return "http://www.gamespot.com/pages/search/search_ajax.php?q=%s&type=game&offset=%i&tags_only=false&sort=rank" % (query.replace(":", "").replace("-", "").replace("_", "").replace(" ", "%20"), page * 10)
+
+def get_info_url(id):
+    return Gamespot.get_link(id) + "tech_info.html"
  
 """
 Must use this crazy workaround, or gamespot wont return any results
@@ -157,13 +221,71 @@ def get_html(url):
     except:
         print "Error accessing:", url
         return None 
+
+def process_game_info(info, type, value):
+    if type == "Publisher":
+        info.publisher = value
+    elif type == "Developer":
+        info.developer = value
+    elif type == "Genre":
+        info.genre = value
+    elif type == "Release Date":
+        info.release_date = value.replace("  ", " 0").replace("(more)", "")
+    elif type == "ESRB":
+        info.esrb = value
+    elif type == u"ESRB\xa0Descriptors":
+        info.esrb_reason = value
+    elif type == u"Number\xa0of\xa0Players":
+        info.num_players = value
+    elif type == "Sound":
+        info.sound = value
+    else:
+        print "Type: \"%s\", Value: \"%s\"" % (type, value)
+
+def process_game_infos(soup):
+    game_infos = soup.findAll("dl", "game_info")
+    for game_info in game_infos:
+        gi = "<html><body>" + str(game_info)
+        gi = re.sub('<dt>([^:]+):</dt>', '<div class="\\1">', gi)
+        gi = gi.replace("<dd>", "")
+        gi = gi.replace("</dd>", "</div>")
+        gi = gi + "</body></html>"
+        soup2 = BeautifulSoup(gi)
+        divs = soup2.findAll("div")
+        for div in divs:
+            type = div["class"].strip()
+            value = div.text.strip()
+            process_game_info(info, type, value)
+        
+def get_li_data_more(node, type, more_class="more"):
+    r1 = None
+    r2 = None
+    li = node.find("li", type)
+    if li:
+        data = li.find("span", "data")
+        if data:
+            r1 = data.text.strip()
+        more = li.find("span", more_class)
+        if more:
+            r2 = more.text.strip()
+    return (r1, r2)
+
+def get_li_span_data(node, data_name):
+    li = node.find("li", data_name)
+    if li:
+        data = li.find("span", "data")
+        if data:
+            return data.text.strip()
+    return None    
     
 def main():
     if len(sys.argv) == 2:
-        results = GameSpot.search(sys.argv[1])
+        results = Gamespot.search(sys.argv[1])
         for result in results:
-            print result, "\n"
-            print GameSpot.get_info(result.link), "\n"
+            pprint(vars(result))
+            print ""
+            pprint(vars(Gamespot.get_info(result.id)))
+            print ""
 
 if __name__ == "__main__":
     main()
